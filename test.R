@@ -1,5 +1,5 @@
 sim1 <- function(mu1=0, mu2=1.958){
-  res <- foreach(index=1:500, .packages='ITRGen', .combine=rbind, .errorhandling='remove') %dopar% {
+  print(system.time(res <- foreach(index=1:500, .packages='ITRGen', .combine=rbind, .errorhandling='remove') %dopar% {
     set.seed(index)
 
     sample.size.train <- 1000
@@ -48,9 +48,9 @@ sim1 <- function(mu1=0, mu2=1.958){
     value_weighted <- mean((x.test[,2]-((x.test[,1])^3-2*x.test[,1])) * d_weighted)
     value_null <- mean((x.test[,2]-((x.test[,1])^3-2*x.test[,1])) * d_null)
 
-    c(value_weighted, value_null)
-  }
-  save(res, file = paste0("~/Documents/Research/Yingqi Zhao/Discuss on generalization/simulation/sim1_", mu1, "_", mu2,".RData"))
+    c(value_weighted, value_null, value_weighted.one)
+  }))
+  save(res, file = paste0("~/Simulations/ITRGen/case1_", mu1, "_", mu2,".RData"))
   apply(res,2,mean)
   apply(res,2,sd)
 }
@@ -60,7 +60,7 @@ n_cores <- detectCores(all.tests = FALSE, logical = TRUE)
 cl <- makeCluster(n_cores)
 registerDoParallel(cl)
 
-mu1_seq <- mu2_seq <- c(0, 0.734, 1.469, 1.958)
+mu1_seq <- mu2_seq <- c(0, 0.734, 1.469, 1.958)#seq(-2.448, 2.448, length.out = 21)
 
 for (mu1 in mu1_seq){
   for (mu2 in mu2_seq){
