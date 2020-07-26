@@ -1,4 +1,4 @@
-Package: ITRInference
+Package: ITRGen
 Type: Package
 Title: Estimation and inference of individualized treamtent rule using pooled-and-split de-correlated score
 Version: 1.0.0

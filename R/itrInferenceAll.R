@@ -43,22 +43,25 @@ ITRFitAll <- function(data, propensity = NULL, outcome = NULL, loss = 'logistic'
                       outcomeModel='kernel', outcomeFormula = NULL,
                       propensityModel='kernel', propensityFormula = NULL,
                       intercept=FALSE, test=TRUE, indexToTest=c(1:8), parallel=FALSE,
-                      screeningMethod="SIRS", outcomeScreeningFamily = 'Gaussian', standardize = TRUE){
+                      screeningMethod="SIRS", outcomeScreeningFamily = 'Gaussian', standardize = TRUE, sample.weight = NULL){
   size <- dim(data$predictor)[1]
   if(is.null(sampleSplitIndex)){
     sampleSplitIndex <- (rnorm(size) > 0)
+  }
+  if(is.null(sample.weight)){
+    sample.weight <- rep(1, times=size)
   }
   fit <- NULL
   fit[[1]] <- ITRFit(data = data, propensity = propensity, outcome = outcome, loss = loss, sampleSplitIndex = sampleSplitIndex,
                      type.measure = type.measure,
                      outcomeModel = outcomeModel, outcomeFormula = outcomeFormula, propensityModel = propensityModel,
                      propensityFormula = propensityFormula, intercept = intercept, screeningMethod = screeningMethod,
-                     outcomeScreeningFamily = outcomeScreeningFamily, standardize = standardize)
+                     outcomeScreeningFamily = outcomeScreeningFamily, standardize = standardize, sample.weight = sample.weight)
   fit[[2]] <- ITRFit(data = data, propensity = propensity, outcome = outcome, loss = loss, sampleSplitIndex = (!sampleSplitIndex),
                      type.measure = type.measure,
                      outcomeModel = outcomeModel, outcomeFormula = outcomeFormula, propensityModel = propensityModel,
                      propensityFormula = propensityFormula, intercept = intercept, screeningMethod = screeningMethod,
-                     outcomeScreeningFamily = outcomeScreeningFamily, standardize = standardize)
+                     outcomeScreeningFamily = outcomeScreeningFamily, standardize = standardize, sample.weight = sample.weight)
   if (test){
     score_1 <- scoreTest(fit[[1]], indexToTest = indexToTest, parallel=parallel, intercept = TRUE)
     score_2 <- scoreTest(fit[[2]], indexToTest = indexToTest, parallel=parallel, intercept = TRUE)
