@@ -43,13 +43,17 @@ ITRFitAll <- function(data, propensity = NULL, outcome = NULL, loss = 'logistic'
                       outcomeModel='kernel', outcomeFormula = NULL,
                       propensityModel='kernel', propensityFormula = NULL,
                       intercept=FALSE, test=TRUE, indexToTest=c(1:8), parallel=FALSE,
-                      screeningMethod="SIRS", outcomeScreeningFamily = 'Gaussian', standardize = TRUE, sample.weight = NULL){
+                      screeningMethod="SIRS", outcomeScreeningFamily = 'Gaussian', standardize = TRUE, is.weight = FALSE, x.test=NULL){
   size <- dim(data$predictor)[1]
   if(is.null(sampleSplitIndex)){
     sampleSplitIndex <- (rnorm(size) > 0)
   }
-  if(is.null(sample.weight)){
-    sample.weight <- rep(1, times=size)
+  sample.weight <- rep(1, times=size)
+  if(is.weight){
+    density.ratio1 <- densratio::densratio(data$predictor[!sampleSplitIndex,], x.test)
+    sample.weight[!sampleSplitIndex] <- pmin(1/density.ratio1$compute_density_ratio(data$predictor[!sampleSplitIndex,]), rep(10^4, times=sum(!sampleSplitIndex)))
+    density.ratio2 <- densratio::densratio(data$predictor[sampleSplitIndex,], x.test)
+    sample.weight[sampleSplitIndex] <- pmin(1/density.ratio1$compute_density_ratio(data$predictor[sampleSplitIndex,]), rep(10^4, times=sum(sampleSplitIndex)))
   }
   fit <- NULL
   fit[[1]] <- ITRFit(data = data, propensity = propensity, outcome = outcome, loss = loss, sampleSplitIndex = sampleSplitIndex,
