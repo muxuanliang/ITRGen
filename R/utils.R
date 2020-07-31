@@ -243,3 +243,171 @@ screening <- function(x, y, method='glmnet', family='Gaussian'){
   }
   supp
 }
+
+library(dplyr)
+
+# set working directory
+source("../obj_fun.R")
+##### True objectives
+OBJ <- function(par, data, k = 2, CONST = 1, rho = NULL)
+  # objective
+  # data = list of data (X, C)
+  # par[1] = intercept
+  # X doesn't include the all-ones (intercept) column
+{
+  f <- with(data, par[1] + as.vector(X %*% par[-1]))
+  if(k != Inf & !is.null(rho)) CONST <- (k*(k-1)*rho + 1)^(1/k)
+
+  if(CONST < 1) {
+    stop("CONST should be >= 1 and rho should be >= 0")
+  } else if(CONST == 1) {  # ERM
+    return(with(data, mean(C * (surg(f) - 1))))
+  }
+  ALPHA = 1 - 1/CONST
+  k_star <- k/(k-1)
+  z <- with(data, c(C, -C))
+  prob <- c(surg(f), surg(-f))
+
+  if(k == Inf) {
+    obj <- min(CVaR(,z, prob, ALPHA))
+  } else {
+    eta <- HMCR.root(z, prob, k_star, ALPHA)
+    obj <- HMCR(eta, z, prob, k_star, ALPHA)
+  }
+  return(obj)
+}
+OBJ.gd <- function(par, data, k = 2, CONST = 1, rho = NULL)
+  # objective gradient: colMeans(((ZP - ZN) * surg.gd(f)) * cbind(1,X))
+  # data = list of data (X, C)
+  # par[1] = intercept
+  # X doesn't include the all-ones (intercept) column
+{
+  f <- with(data, par[1] + as.vector(X %*% par[-1]))
+  if(k != Inf & !is.null(rho)) CONST <- (k*(k-1)*rho + 1)^(1/k)
+
+  if(CONST < 1) {
+    stop("CONST should be >= 1 and rho should be >= 0")
+  } else if(CONST == 1) {  # ERM
+    return(with(data, colMeans(C * surg.gd(f) * cbind(1,X))))
+  }
+  ALPHA <- 1 - 1/CONST
+  k_star <- ifelse(k == Inf, 1, k/(k-1))
+  z <- with(data, c(C, -C))
+  prob <- c(surg(f), surg(-f))
+
+  if(k == Inf) {
+    eta <- VaR(z, prob, ALPHA)[1]
+    lambda <- 1
+  } else {
+    eta <- HMCR.root(z, prob, k_star, ALPHA)
+    lambda <- with(data, mean( surg(+f)/2 * pmax(+C - eta, 0)^k_star +
+                                 surg(-f)/2 * pmax(-C - eta, 0)^k_star )^(1/k_star))
+  }
+  const <- CONST / (2 * k_star * lambda^{k_star - 1})
+  data$ZP <- with(data, const * pmax(+C - eta, 0)^k_star)
+  data$ZN <- with(data, const * pmax(-C - eta, 0)^k_star)
+  return(with(data, colMeans((ZP - ZN) * surg.gd(f) * cbind(1,X))))
+}
+##### ERM majorant objectives
+L_ERM <- function(par, pen.l2 = 0, data)
+  # majorant objective: mean(CP * surgP(f) + CN * surgN(f) - S * f) + pen
+  # data = list of data (X, C, S)
+  # par[1] = intercept
+  # X doesn't include the all-ones (intercept) column
+{
+  f   <- with(data, par[1] + as.vector(X %*% par[-1]))
+  pen <- pen.l2/2 * sum(par[-1]^2)
+  return(with(data, mean(pmax(C, 0) * surgP(f) + pmax(-C, 0) * surgN(f) - S * f)) + pen)
+}
+L_ERM.gd <- function(par, pen.l2 = 0, data)
+  # majorant gradient: colMeans((pmax(C, 0) * surgP.gd(f) + pmax(-C, 0) * surgN.gd(f) - S) * cbind(1,X))) + pen.gd
+  # data = list of data (X, C, S)
+  # par[1] = intercept
+  # X doesn't include the all-ones (intercept) column
+{
+  f <- with(data, par[1] + as.vector(X %*% par[-1]))
+  pen.gd <- pen.l2 * c(0, par[-1])
+  return(with(data, colMeans((pmax(C, 0) * surgP.gd(f) + pmax(-C, 0) * surgN.gd(f) - S) * cbind(1,X))) + pen.gd)
+}
+##### BSUM majorant objectives
+L <- function(par, pen.l2 = 0, data)
+  # majorant objective: mean(ZP * surgP(f) + ZN * surgP(-f) - S * f) + pen
+  # data = list of data (X, ZP, ZN, S)
+  # par[1] = intercept
+  # X doesn't include the all-ones (intercept) column
+{
+  f   <- with(data, par[1] + as.vector(X %*% par[-1]))
+  pen <- pen.l2/2 * sum(par[-1]^2)
+  return(with(data, mean(ZP * surgP(f) + ZN * surgP(-f) - S * f)) + pen)
+}
+L.gd <- function(par, pen.l2 = 0, data)
+  # majorant gradient: colMeans((ZP * surgP.gd(f) - ZN * surgP.gd(-f) - S) * cbind(1,X))) + pen.gd
+  # data = list of data (X, ZP, ZN, S)
+  # par[1] = intercept
+  # X doesn't include the all-ones (intercept) column
+{
+  f       <- with(data, par[1] + as.vector(X %*% par[-1]))
+  pen.gd  <- pen.l2 * c(0, par[-1])
+  return(with(data, colMeans((ZP * surgP.gd(f) - ZN * surgP.gd(-f) - S) * cbind(1,X))) + pen.gd)
+}
+
+library(dplyr)
+##### Smoothed ramp losses
+surgP <- function(u) { ifelse(u <= 1, ifelse(u <=  0,  1-2*u, (1-u)^2), 0) }
+surgN <- function(u) { ifelse(u <= 0, ifelse(u <= -1, -1-2*u,     u^2), 0) }
+surg  <- function(u) { surgP(u) - surgN(u) }
+surgP.gd <- function(u) { ifelse(u <= 1, ifelse(u <=  0, -2, -2+2*u), 0) }
+surgN.gd <- function(u) { ifelse(u <= 0, ifelse(u <= -1, -2,    2*u), 0) }
+surg.gd  <- function(u) { surgP.gd(u) - surgN.gd(u) }
+##### Coherent risk measures
+HMCR <- function(eta=NULL, z, prob=rep(1/length(z),length(z)), order=2, alpha=0) {
+  prob <- prob/sum(prob)
+  if(is.null(eta)) { eta <- z }
+  sapply(eta, function(eta) eta + 1/(1-alpha) * sum(prob * pmax(z - eta, 0)^order)^(1/order))
+}
+HMCR.gd <- function(eta=NULL, z, prob=rep(1/length(z),length(z)), order=2, alpha=0) {
+  prob <- prob/sum(prob)
+  if(is.null(eta)) { eta <- z }
+  sapply(eta, function(eta)
+    if(all(z <= eta)) return(Inf) else return(
+      1 - 1/(1-alpha) * sum(prob * pmax(z - eta, 0)^order)^(1/order-1) *
+        sum(prob * pmax(z - eta, 0)^(order-1))
+    ))
+}
+HMCR.root <- function(z, prob=rep(1/length(z),length(z)), order=2, alpha=0, tol.eta=1e-5) {
+  prob <- prob/sum(prob)
+  sapply(alpha, function(alpha)
+    if(alpha == 0) return(-Inf) else return(
+      uniroot(HMCR.gd, z = z, prob = prob, order = order, alpha = alpha,
+              interval = c((min(z)-(1-alpha)*max(z))/alpha, max(z*(prob>0))-tol.eta), tol = tol.eta)$root
+    ))
+}
+CVaR <- function(eta=NULL, z, prob=rep(1/length(z),length(z)), alpha=0) {
+  prob <- prob/sum(prob)
+  if(is.null(eta)) {
+    if(length(z) == 1) return(z) else {
+      id.sort <- sort(z, decreasing = T, index.return = T)$ix
+      CVaR_sort <- z[id.sort[1]]
+      CCDF <- 0  # complementary CDF
+      for(i in 2:length(z)) {
+        z_sort_diff <- z[id.sort[i-1]] - z[id.sort[i]]
+        CCDF <- CCDF + prob[id.sort[i-1]]
+        CVaR_sort[i] <- CVaR_sort[i-1] - (1 - CCDF/(1-alpha)) * z_sort_diff
+      }
+      CVaR <- numeric()
+      CVaR[id.sort] <- CVaR_sort
+      return(CVaR)
+    }
+  } else return(
+    sapply(eta, function(eta) eta + 1/(1-alpha) * sum(prob * pmax(z - eta,0)))
+  )
+}
+VaR <- function(z, prob=rep(1/length(z),length(z)), alpha=0, tol.CVaR=0) {
+  prob <- prob/sum(prob)
+  CVaR(,z, prob, alpha) %>% { z[which(. <= min(.) + tol.CVaR)] }
+}
+##### Projection on the l2-ball
+proj.l2 <- function(x, cnst.l2 = Inf) {
+  return(x / pmax(sqrt(sum(x^2))/cnst.l2, 1))
+}
+

@@ -27,9 +27,9 @@ sim1 <- function(mu1=0, mu2=1.958){
     x.test <- mgcv::rmvn(sample.size.test, mu.test, V.test)
 
     # estimate density ratio
-    fit_weighted <- ITRFitAll(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), propensity = rep(0.5, times=sample.size.train), is.weight = TRUE, x.test = x.test)
-    fit_null <- ITRFitAll(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), propensity = rep(0.5, times=sample.size.train))
-
+    fit_weighted <- ITRFitAll(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), propensity = rep(0.5, times=sample.size.train), is.weight = TRUE, x.test = x.test, test = FALSE)
+    fit_null <- ITRFitAll(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), propensity = rep(0.5, times=sample.size.train), test = FALSE)
+    fit_c <- ContrastITR(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), is.weight = TRUE, x.test = x.test)
     # one directional
     #beta <- (fit_null$fit[[1]]$fit$beta[,fit_null$fit[[1]]$fit$lambda==fit_null$fit[[1]]$fit$lambda.min]+fit_null$fit[[2]]$fit$beta[,fit_null$fit[[2]]$fit$lambda==fit_null$fit[[2]]$fit$lambda.min])/2
     #density.ratio.one <- densratio::densratio(x.train %*% beta, x.test %*% beta)
@@ -41,11 +41,13 @@ sim1 <- function(mu1=0, mu2=1.958){
     #d_weighted.one <- sign(predict(fit_weighted.one$fit[[1]]$fit, newx = x.test, s=fit_weighted.one$fit[[1]]$fit$lambda.min)+predict(fit_weighted.one$fit[[2]]$fit, newx = x.test, s=fit_weighted.one$fit[[2]]$fit$lambda.min))
     d_weighted <- sign(predict(fit_weighted$fit[[1]]$fit, newx = x.test, s=fit_weighted$fit[[1]]$fit$lambda.min)+predict(fit_weighted$fit[[2]]$fit, newx = x.test, s=fit_weighted$fit[[2]]$fit$lambda.min))
     d_null <- sign(predict(fit_null$fit[[1]]$fit, newx = x.test, s=fit_null$fit[[1]]$fit$lambda.min)+predict(fit_null$fit[[2]]$fit, newx = x.test, s=fit_null$fit[[2]]$fit$lambda.min))
+    d_c <- sign(fit_c$par[1]+x.test%*%fit_c$par[-1])
     #value_weighted.one <- mean((x.test[,2]-((x.test[,1])^3-2*x.test[,1])) * d_weighted.one)
     value_weighted <- mean((x.test[,2]-((x.test[,1])^3-2*x.test[,1])) * d_weighted)
     value_null <- mean((x.test[,2]-((x.test[,1])^3-2*x.test[,1])) * d_null)
+    value_c <- mean((x.test[,2]-((x.test[,1])^3-2*x.test[,1])) * d_c)
 
-    c(value_weighted, value_null)
+    c(value_weighted, value_null, value_c)
   }))
   save(res, file = paste0("/mnt/c/Users/lmx19/Documents/Simulations/ITRGen/case1_", mu1, "_", mu2,".RData"))
   apply(res,2,mean)
