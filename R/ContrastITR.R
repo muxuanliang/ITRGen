@@ -8,8 +8,45 @@ ContrastITR <- function(data, is.weight = TRUE, x.test = NULL, nfold = 10){
   fit <- NULL
   fit_tree <- grf::causal_forest(X=data$predictor, Y=data$outcome, W=data$treatment,tune.parameters = 'all')
   contrast <- predict(fit_tree)$predictions * sample.weight
+  X <- data$predictor
+  C <- contrast
 
-  fit <- DRITR(data=list(X=data$predictor, C=contrast), CONST = 1, maxit.mm = 100)
+  n <- size
+  n_fold <- nfold
+  n_tune_rep <- 3
+  cnst.l2_seq <- c(0.1, 0.5, 1, 2, 4)
+
+  k <- 2
+  CONST.max <- 100
+
+  # cnst.l2 tuninig
+  shuffle <- cut(sample.int(n), n_fold, labels = 1:n_fold)
+  tune <- foreach(fold = 1:n_fold, .combine = rbind) %:%
+    foreach(cnst.l2 = cnst.l2_seq, .combine = rbind) %do% {
+      data.tune <- list(X = subset(X, shuffle != fold), C = subset(C, shuffle != fold))
+      par <- t(replicate(n_tune_rep, DRITR(data.tune, cnst.l2 = cnst.l2, maxit.mm = 100)$par))
+      colnames(par) <- paste0("par", 0:p)
+      value <- apply(par, 1, function(par) {
+        f <- par[1] + as.numeric(subset(X, shuffle == fold) %*% par[-1])
+        mean(subset(C, shuffle == fold) * sign(f))
+      })
+      id.tune <- which.max(value)
+      c(fold = fold, cnst.l2 = cnst.l2, par[id.tune,], value = value[id.tune])
+    }
+  tune_summary <- data.frame(tune) %>%
+    group_by(cnst.l2) %>%
+    summarise(value.mean = mean(value), value.se = sd(value)/sqrt(n_fold))
+  tune.max <- top_n(tune_summary, 1, value.mean)
+  tune.1se <- filter(tune_summary, value.mean >= tune.max$value.mean - tune.max$value.se) %>%
+    top_n(1, -cnst.l2)
+  par.init <- data.frame(tune) %>%
+    filter(cnst.l2 == tune.1se$cnst.l2) %>%
+    top_n(1, value) %>%
+    select(starts_with("par")) %>%
+    as.numeric()
+  cnst.l2 <- tune.1se$cnst.l2
+
+  fit <- DRITR(data=list(X=data$predictor, C=contrast),par.init, cnst.l2 = cnst.l2, CONST = 1, maxit.mm = 100)
   fit
 }
 
