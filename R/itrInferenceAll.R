@@ -51,9 +51,9 @@ ITRFitAll <- function(data, propensity = NULL, outcome = NULL, loss = 'logistic'
   sample.weight <- rep(1, times=size)
   if(is.weight){
     density.ratio1 <- densratio::densratio(data$predictor[!sampleSplitIndex,], x.test)
-    sample.weight[!sampleSplitIndex] <- pmin(1/density.ratio1$compute_density_ratio(data$predictor[!sampleSplitIndex,]), rep(10^4, times=sum(!sampleSplitIndex)))
+    sample.weight[!sampleSplitIndex] <- pmin(1/density.ratio1$compute_density_ratio(data$predictor[!sampleSplitIndex,]), rep(10, times=sum(!sampleSplitIndex)))
     density.ratio2 <- densratio::densratio(data$predictor[sampleSplitIndex,], x.test)
-    sample.weight[sampleSplitIndex] <- pmin(1/density.ratio1$compute_density_ratio(data$predictor[sampleSplitIndex,]), rep(10^4, times=sum(sampleSplitIndex)))
+    sample.weight[sampleSplitIndex] <- pmin(1/density.ratio1$compute_density_ratio(data$predictor[sampleSplitIndex,]), rep(10, times=sum(sampleSplitIndex)))
   }
   fit <- NULL
   fit[[1]] <- ITRFit(data = data, propensity = propensity, outcome = outcome, loss = loss, sampleSplitIndex = sampleSplitIndex,

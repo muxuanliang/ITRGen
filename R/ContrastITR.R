@@ -3,7 +3,9 @@ ContrastITR <- function(data, is.weight = TRUE, x.test = NULL, nfold = 10){
   size <- dim(data$predictor)[1]
   if(is.weight){
     density.ratio <- densratio::densratio(data$predictor, x.test)
-    sample.weight <- pmin(1/density.ratio$compute_density_ratio(data$predictor), rep(10^4, times=size))
+    sample.weight <- pmin(1/pmin(density.ratio$compute_density_ratio(data$predictor), rep(5, times=size)), rep(5, times=size))
+  } else {
+    sample.weight <- rep(1, times=size)
   }
   fit <- NULL
   fit_tree <- grf::causal_forest(X=data$predictor, Y=data$outcome, W=data$treatment,tune.parameters = 'all')
@@ -16,8 +18,13 @@ ContrastITR <- function(data, is.weight = TRUE, x.test = NULL, nfold = 10){
   n_tune_rep <- 3
   cnst.l2_seq <- c(0.1, 0.5, 1, 2, 4)
 
+  p <- dim(data$predictor)[2]
   k <- 2
   CONST.max <- 100
+  CONST_seq <- seq(1, CONST.max, round((CONST.max - 1)/99, 2))
+  if (is.weight){
+    CONST_seq <- 1
+  }
 
   # cnst.l2 tuninig
   shuffle <- cut(sample.int(n), n_fold, labels = 1:n_fold)
@@ -25,7 +32,7 @@ ContrastITR <- function(data, is.weight = TRUE, x.test = NULL, nfold = 10){
     foreach(cnst.l2 = cnst.l2_seq, .combine = rbind) %do% {
       data.tune <- list(X = subset(X, shuffle != fold), C = subset(C, shuffle != fold))
       par <- t(replicate(n_tune_rep, DRITR(data.tune, cnst.l2 = cnst.l2, maxit.mm = 100)$par))
-      colnames(par) <- paste0("par", 0:p)
+      colnames(par) <- paste0("par", 0:NCOL(X))
       value <- apply(par, 1, function(par) {
         f <- par[1] + as.numeric(subset(X, shuffle == fold) %*% par[-1])
         mean(subset(C, shuffle == fold) * sign(f))
@@ -47,7 +54,32 @@ ContrastITR <- function(data, is.weight = TRUE, x.test = NULL, nfold = 10){
   cnst.l2 <- tune.1se$cnst.l2
 
   fit <- DRITR(data=list(X=data$predictor, C=contrast),par.init, cnst.l2 = cnst.l2, CONST = 1, maxit.mm = 100)
-  fit
+
+  if (!is.weight){
+    par.ERM <- fit$par
+    par.DistR <- matrix(c(par.ERM, NA, NA, 1), nrow = 1,
+                        dimnames = list(NULL, c(paste0("par", 0:p), "eta", "lambda", "DistR_const")))
+    for(id.CONST in 2:length(CONST_seq)) {
+      DistR <- DRITR(data=list(X=data$predictor, C=contrast), par.DistR[id.CONST-1, paste0("par", 0:p)],
+                     cnst.l2 = cnst.l2, k = k, CONST = CONST_seq[id.CONST], maxit.mm = 100)
+      par.DistR <- rbind(par.DistR, c(DistR$par, DistR$eta, DistR$lambda, CONST_seq[id.CONST]))
+    }
+
+    C.calib_pred <- predict(fit_tree, x.test)$predictions
+
+    id.calib <- which.max(select(data.frame(par.DistR), starts_with("par")) %>%
+                            apply(1, function(par) {
+                              f <- par[1] + as.numeric(x.test %*% par[-1])
+                              mean(C.calib_pred * sign(f))
+                            }))
+
+    dr_par <- par.DistR[id.calib, c(1:(p+1))]
+
+  } else {
+    dr_par <- NULL
+  }
+
+  list(standard_fit = fit$par, dr_fit = dr_par)
 }
 
 library(dplyr)

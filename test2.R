@@ -1,5 +1,5 @@
 sim2 <- function(xi=0.1){
-  print(system.time(res <- foreach(index=1:500, .packages='ITRGen', .combine=rbind, .errorhandling='remove') %dopar% {
+  print(system.time(res <- foreach(index=1:500, .packages=c('ITRGen', 'grf', 'foreach'), .combine=rbind, .errorhandling='remove') %dopar% {
     set.seed(index)
 
     sample.size.train <- 1000
@@ -31,9 +31,10 @@ sim2 <- function(xi=0.1){
     # estimate density ratio
     #density.ratio <- densratio::densratio(x.train, x.test)
     #w.weight <- pmin(1/density.ratio$compute_density_ratio(x.train), rep(bdd, times=sample.size.train))
-    fit_weighted <- ITRFitAll(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), propensity = rep(0.5, times=sample.size.train), is.weight = TRUE, x.test = x.test)
-    fit_null <- ITRFitAll(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), propensity = rep(0.5, times=sample.size.train))
-    fit_c <- ContrastITR(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), is.weight = TRUE, x.test = x.test)
+    #fit_weighted <- ITRFitAll(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), propensity = rep(0.5, times=sample.size.train), is.weight = TRUE, x.test = x.test)
+    #fit_null <- ITRFitAll(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), propensity = rep(0.5, times=sample.size.train))
+    fit_w <- ContrastITR(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), is.weight = TRUE, x.test = x.test)
+    fit_c <- ContrastITR(data=list(predictor = x.train, treatment = tr.train, outcome=y.train), is.weight = FALSE, x.test = x.test)
     # one directional
     #beta <- (fit_null$fit[[1]]$fit$beta[,fit_null$fit[[1]]$fit$lambda==fit_null$fit[[1]]$fit$lambda.min]+fit_null$fit[[2]]$fit$beta[,fit_null$fit[[2]]$fit$lambda==fit_null$fit[[2]]$fit$lambda.min])/2
     #density.ratio.one <- densratio::densratio(x.train %*% beta, x.test %*% beta)
@@ -44,9 +45,11 @@ sim2 <- function(xi=0.1){
     xi.test <- rbinom(10^6, 1, xi)
     x.test <- matrix(rnorm(p * 10^6), ncol = p) + xi.test %o% mu1 + (1-xi.test) %o% mu0
     #d_weighted.one <- sign(predict(fit_weighted.one$fit[[1]]$fit, newx = x.test, s=fit_weighted.one$fit[[1]]$fit$lambda.min)+predict(fit_weighted.one$fit[[2]]$fit, newx = x.test, s=fit_weighted.one$fit[[2]]$fit$lambda.min))
-    d_weighted <- sign(predict(fit_weighted$fit[[1]]$fit, newx = x.test, s=fit_weighted$fit[[1]]$fit$lambda.min)+predict(fit_weighted$fit[[2]]$fit, newx = x.test, s=fit_weighted$fit[[2]]$fit$lambda.min))
-    d_null <- sign(predict(fit_null$fit[[1]]$fit, newx = x.test, s=fit_null$fit[[1]]$fit$lambda.min)+predict(fit_null$fit[[2]]$fit, newx = x.test, s=fit_null$fit[[2]]$fit$lambda.min))
-    d_c <- sign(fit_c$par[1]+x.test%*%fit_c$par[-1])
+    #d_weighted <- sign(predict(fit_weighted$fit[[1]]$fit, newx = x.test, s=fit_weighted$fit[[1]]$fit$lambda.min)+predict(fit_weighted$fit[[2]]$fit, newx = x.test, s=fit_weighted$fit[[2]]$fit$lambda.min))
+    #d_null <- sign(predict(fit_null$fit[[1]]$fit, newx = x.test, s=fit_null$fit[[1]]$fit$lambda.min)+predict(fit_null$fit[[2]]$fit, newx = x.test, s=fit_null$fit[[2]]$fit$lambda.min))
+    d_s <- sign(fit_c$standard_fit[1]+x.test%*%fit_c$standard_fit[-1])
+    d_w <- sign(fit_w$standard_fit[1]+x.test%*%fit_w$standard_fit[-1])
+    d_c <- sign(fit_c$dr_fit[1]+x.test%*%fit_c$dr_fit[-1])
     #value_weighted.one <- mean(((-1.5) * (2*xi.test -1)-2 * x.test[,1]+x.test[,2]) * d_weighted.one)
     value_weighted <- mean(((-1.5) * (2*xi.test -1)-2 * x.test[,1]+x.test[,2]) * d_weighted)
     value_null <- mean(((-1.5) * (2*xi.test -1)-2 * x.test[,1]+x.test[,2]) * d_null)

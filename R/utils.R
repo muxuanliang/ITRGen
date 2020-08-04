@@ -246,8 +246,6 @@ screening <- function(x, y, method='glmnet', family='Gaussian'){
 
 library(dplyr)
 
-# set working directory
-source("../obj_fun.R")
 ##### True objectives
 OBJ <- function(par, data, k = 2, CONST = 1, rho = NULL)
   # objective
