@@ -2,8 +2,16 @@ ContrastITR <- function(data, is.weight = TRUE, x.test = NULL, nfold = 10){
   library(dplyr)
   size <- dim(data$predictor)[1]
   if(is.weight){
-    density.ratio <- densratio::densratio(data$predictor, x.test)
-    sample.weight <- pmin(1/pmin(density.ratio$compute_density_ratio(data$predictor), rep(5, times=size)), rep(5, times=size))
+    #density.ratio <- densratio::densratio(data$predictor, x.test)
+    #sample.weight <- pmin(1/pmin(density.ratio$compute_density_ratio(data$predictor), rep(5, times=size)), rep(5, times=size))
+
+    density.ratio <- densratio::densratio(x.test, data$predictor)
+    sample.weight <- pmin(density.ratio$compute_density_ratio(data$predictor), rep(5, times=size))
+    #screening <- VariableScreening::screenIID(data$predictor, dr)
+    #idx <- screening$rank[1:3]
+    #dr2 <- densratio::densratio(x.test[,idx], data$predictor[,idx])
+    #sample.weight <- pmin(dr2$compute_density_ratio(data$predictor[,idx]), rep(5, times=size))
+
   } else {
     sample.weight <- rep(1, times=size)
   }
